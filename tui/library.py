@@ -37,7 +37,7 @@ class MyLibraryScreen(Screen):
         yield Footer()
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        idx = event.option_list.index
+        idx = event.option_index
         if idx is None:
             return
         novels = _scan_library()
@@ -141,7 +141,7 @@ class LocalChapterScreen(Screen):
             ol.focus()
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        idx = event.option_list.index
+        idx = event.option_index
         if idx is None or idx >= len(self.files):
             return
         self.app.push_screen(LocalReaderScreen(self.files, self.slug, start=idx))

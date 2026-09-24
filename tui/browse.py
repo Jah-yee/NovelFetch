@@ -111,7 +111,7 @@ class SearchScreen(Screen):
             pi.update(f"{len(novels)} results")
 
     async def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        idx = event.option_list.index
+        idx = event.option_index
         if idx is None or idx >= len(self._results):
             return
         event.option_list.disabled = True
@@ -182,7 +182,7 @@ class NovelListScreen(Screen):
         self.query_one("#novel-list", OptionList).focus()
 
     async def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        idx = event.option_list.index
+        idx = event.option_index
         if idx is None:
             return
         event.option_list.disabled = True
@@ -242,7 +242,7 @@ class ChapterListScreen(Screen):
         self.query_one("#chapter-list", OptionList).focus()
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        idx = event.option_list.index
+        idx = event.option_index
         if idx is None:
             return
         self.app.push_screen(
@@ -291,7 +291,7 @@ class GenreScreen(Screen):
         yield Footer()
 
     async def on_option_list_option_selected(self, event: OptionList.OptionSelected):
-        idx = event.option_list.index
+        idx = event.option_index
         if idx is None:
             return
         event.option_list.disabled = True
