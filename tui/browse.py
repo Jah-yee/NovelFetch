@@ -1,21 +1,29 @@
 from textual.binding import Binding
-from textual.containers import ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import (
     Footer,
     Input,
-    Label,
-    ListItem,
-    ListView,
     LoadingIndicator,
+    OptionList,
     Static,
 )
+from textual.widgets.option_list import Option
 
 from core.progress import progress
 from tui.download import DownloadDialog
 from tui.reader import ReaderScreen
 from tui.shared import CustomHeader
 from tui.utils import _get_chapters, _get_source
+
+
+def _novel_to_option(novel: dict) -> Option:
+    sub = novel.get("author", "")
+    if novel.get("latest"):
+        sub += f"  ·  {novel['latest']}"
+    text = novel["title"]
+    if sub:
+        text += f"\n{sub}"
+    return Option(text, id=novel["slug"])
 
 
 class SearchScreen(Screen):
@@ -39,9 +47,8 @@ class SearchScreen(Screen):
         yield CustomHeader()
         yield Input(placeholder="Search novels...")
         yield Static("", id="page-info")
-        with ScrollableContainer():
-            yield ListView()
-            yield LoadingIndicator(classes="loading")
+        yield OptionList(id="search-results")
+        yield LoadingIndicator(classes="loading")
         yield Footer()
 
     def on_mount(self):
@@ -63,8 +70,8 @@ class SearchScreen(Screen):
             self._search_timer = self.set_timer(0.75, self._do_search)
 
     def _clear_list(self):
-        lv = self.query_one(ListView)
-        lv.clear()
+        ol = self.query_one("#search-results", OptionList)
+        ol.clear_options()
 
     async def _do_search(self):
         if not self._query:
@@ -91,16 +98,10 @@ class SearchScreen(Screen):
             self.query_one(LoadingIndicator).set_class(False, "-visible")
 
     def _show_results(self, novels):
-        lv = self.query_one(ListView)
-        lv.clear()
+        ol = self.query_one("#search-results", OptionList)
+        ol.clear_options()
         for n in novels:
-            sub = n.get("author", "")
-            if n.get("latest"):
-                sub += f"  ·  {n['latest']}"
-            text = n["title"]
-            if sub:
-                text += f"\n{sub}"
-            lv.append(ListItem(Label(text)))
+            ol.add_option(_novel_to_option(n))
         pi = self.query_one("#page-info")
         if not novels:
             pi.update("No novels found")
@@ -109,24 +110,28 @@ class SearchScreen(Screen):
         else:
             pi.update(f"{len(novels)} results")
 
-    async def on_list_view_selected(self, event: ListView.Selected):
-        idx = event.list_view.index
+    async def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        idx = event.option_list.index
         if idx is None or idx >= len(self._results):
             return
-        self.query_one(ListView).disabled = True
+        event.option_list.disabled = True
         self.query_one(LoadingIndicator).set_class(True, "-visible")
         try:
             slug = self._results[idx]["slug"]
             chapters = await _get_chapters(self.source, slug)
             if chapters:
-                self.app.push_screen(ChapterListScreen(chapters, self.source.qualify_slug(slug), source=self.source))
+                self.app.push_screen(
+                    ChapterListScreen(
+                        chapters, self.source.qualify_slug(slug), source=self.source
+                    )
+                )
             else:
                 self.notify("No chapters found.", timeout=3)
         except Exception:
             self.notify("Failed to fetch chapters. Check your connection.", timeout=3)
         finally:
             self.query_one(LoadingIndicator).set_class(False, "-visible")
-            self.query_one(ListView).disabled = False
+            event.option_list.disabled = False
 
     def action_next_page(self):
         if self._page < self._total_pages and not self._fetch_lock:
@@ -142,15 +147,20 @@ class SearchScreen(Screen):
 
     def action_clear_or_pop(self):
         inp = self.query_one(Input)
+        ol = self.query_one("#search-results", OptionList)
         if inp.value:
             inp.value = ""
-            inp.post_message(Input.Changed(inp, ""))
+            self._clear_list()
+            self.query_one("#page-info").update("")
+        elif ol.option_count > 0:
+            self._clear_list()
+            self._results = []
+            self.query_one("#page-info").update("")
         else:
             self.app.pop_screen()
 
     def action_pop(self):
         self.app.pop_screen()
-
 
 
 class NovelListScreen(Screen):
@@ -160,28 +170,22 @@ class NovelListScreen(Screen):
         super().__init__()
         self.novels = novels
         self.source = source
+
     def compose(self):
         yield CustomHeader()
-        items = []
-        for n in self.novels:
-            sub = n.get("author", "")
-            if n.get("latest"):
-                sub += f"  ·  {n['latest']}"
-            text = n["title"]
-            if sub:
-                text += f"\n{sub}"
-            items.append(ListItem(Label(text)))
-        with ScrollableContainer():
-            yield ListView(*items)
-            yield LoadingIndicator(classes="loading")
+        options = [_novel_to_option(n) for n in self.novels]
+        yield OptionList(*options, id="novel-list")
+        yield LoadingIndicator(classes="loading")
         yield Footer()
+
     async def on_mount(self):
-        self.query_one(ListView).focus()
-    async def on_list_view_selected(self, event: ListView.Selected):
-        idx = event.list_view.index
+        self.query_one("#novel-list", OptionList).focus()
+
+    async def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        idx = event.option_list.index
         if idx is None:
             return
-        self.query_one(ListView).disabled = True
+        event.option_list.disabled = True
         self.query_one(LoadingIndicator).set_class(True, "-visible")
         try:
             novel = self.novels[idx]
@@ -193,81 +197,104 @@ class NovelListScreen(Screen):
             bare = slug.split(":", 1)[-1] if ":" in slug else slug
             chapters = await _get_chapters(source, bare)
             if chapters:
-                self.app.push_screen(ChapterListScreen(chapters, source.qualify_slug(bare), source=source))
+                self.app.push_screen(
+                    ChapterListScreen(
+                        chapters, source.qualify_slug(bare), source=source
+                    )
+                )
             else:
                 self.notify("No chapters found.", timeout=3)
         except Exception:
             self.notify("Failed to fetch chapters. Check your connection.", timeout=3)
         finally:
             self.query_one(LoadingIndicator).set_class(False, "-visible")
-            self.query_one(ListView).disabled = False
+            event.option_list.disabled = False
 
     def action_pop(self):
         self.app.pop_screen()
 
-class ChapterListScreen(Screen):
 
+class ChapterListScreen(Screen):
     def __init__(self, chapters: list, slug: str, source=None):
         super().__init__()
         self.chapters = chapters
         self.slug = slug
         self.source = source
+
     BINDINGS = [
         Binding("escape", "pop", "Back"),
         Binding("c", "continue_reading", "Continue"),
         Binding("d", "download_dialog", "Download"),
     ]
+
     def compose(self):
         yield CustomHeader()
         yield Static(f"Chapters: 1-{len(self.chapters)}", classes="title")
         seen = progress.get_seen(self.slug)
-        items = [ListItem(Label(("✓ " if i in seen else "  ") + c["title"])) for i, c in enumerate(self.chapters)]
-        with ScrollableContainer():
-            yield ListView(*items)
+        options = [
+            Option(("✓ " if i in seen else "  ") + c["title"])
+            for i, c in enumerate(self.chapters)
+        ]
+        yield OptionList(*options, id="chapter-list")
         yield Footer()
+
     def on_mount(self):
-        self.query_one(ListView).focus()
-    def on_list_view_selected(self, event: ListView.Selected):
-        idx = event.list_view.index
+        self.query_one("#chapter-list", OptionList).focus()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        idx = event.option_list.index
         if idx is None:
             return
-        self.app.push_screen(ReaderScreen(self.chapters, self.slug, source=self.source, start=idx))
+        self.app.push_screen(
+            ReaderScreen(self.chapters, self.slug, source=self.source, start=idx)
+        )
 
     def action_continue_reading(self):
         idx = progress.get_last(self.slug)
         if idx is not None and 0 <= idx < len(self.chapters):
-            self.app.push_screen(ReaderScreen(self.chapters, self.slug, source=self.source, start=idx))
+            self.app.push_screen(
+                ReaderScreen(self.chapters, self.slug, source=self.source, start=idx)
+            )
         else:
             self.notify("No saved progress.", timeout=2)
 
     def action_download_dialog(self):
-        self.app.push_screen(DownloadDialog(
-            self.chapters, self.slug, self.source,
-            current_idx=None,
-            has_translation=False,
-        ))
+        self.app.push_screen(
+            DownloadDialog(
+                self.chapters,
+                self.slug,
+                self.source,
+                current_idx=None,
+                has_translation=False,
+            )
+        )
 
     def action_pop(self):
         self.app.pop_screen()
 
+
 class GenreScreen(Screen):
     BINDINGS = [Binding("escape", "pop", "Back")]
+
     def __init__(self, source):
         super().__init__()
         self.source = source
+
     def compose(self):
         yield CustomHeader()
         yield Static("Genres", classes="title")
-        with ScrollableContainer():
-            yield ListView(*[ListItem(Label(name)) for name in self.source.genres.values()])
-            yield LoadingIndicator(classes="loading")
+        yield OptionList(
+            *[Option(name) for name in self.source.genres.values()],
+            id="genre-list",
+        )
+        yield LoadingIndicator(classes="loading")
         yield Footer()
 
-    async def on_list_view_selected(self, event: ListView.Selected):
-        idx = event.list_view.index
+    async def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        idx = event.option_list.index
         if idx is None:
             return
-        self.query_one(ListView).disabled = True
+        event.option_list.disabled = True
         self.query_one(LoadingIndicator).set_class(True, "-visible")
         try:
             slug = list(self.source.genres.keys())[idx]
@@ -280,10 +307,10 @@ class GenreScreen(Screen):
             self.notify("Failed to load genre. Check your connection.", timeout=3)
         finally:
             self.query_one(LoadingIndicator).set_class(False, "-visible")
-            self.query_one(ListView).disabled = False
+            event.option_list.disabled = False
 
     def on_mount(self):
-        self.query_one(ListView).focus()
+        self.query_one("#genre-list", OptionList).focus()
 
     def action_pop(self):
         self.app.pop_screen()

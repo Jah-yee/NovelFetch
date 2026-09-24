@@ -1,9 +1,10 @@
+import contextlib
 import os
 
 from textual.binding import Binding
-from textual.containers import ScrollableContainer
 from textual.screen import Screen
-from textual.widgets import Footer, Label, ListItem, ListView, Static
+from textual.widgets import Footer, OptionList, Static
+from textual.widgets.option_list import Option
 
 from core.epub import _chapter_sort_key, _export_epub
 from core.progress import _scan_library, _slug_to_title, progress
@@ -27,17 +28,16 @@ class MyLibraryScreen(Screen):
         if not novels:
             yield Static("No downloaded novels found.", classes="title")
         else:
-            items = []
+            options = []
             for n in novels:
                 last = progress.get_last(n["slug"])
                 suffix = f" · Last: Ch. {last + 1}" if last is not None else ""
-                items.append(ListItem(Label(f"{n['title']}  ({n['count']} ch.){suffix}")))
-            with ScrollableContainer():
-                yield ListView(*items)
+                options.append(Option(f"{n['title']}  ({n['count']} ch.){suffix}"))
+            yield OptionList(*options, id="library-list")
         yield Footer()
 
-    def on_list_view_selected(self, event: ListView.Selected):
-        idx = event.list_view.index
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        idx = event.option_list.index
         if idx is None:
             return
         novels = _scan_library()
@@ -45,14 +45,12 @@ class MyLibraryScreen(Screen):
             self.app.push_screen(LocalChapterScreen(novels[idx]["slug"]))
 
     def on_mount(self):
-        try:
-            self.query_one(ListView).focus()
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            self.query_one("#library-list", OptionList).focus()
 
     def action_delete(self):
-        lv = self.query_one(ListView)
-        idx = lv.index
+        ol = self.query_one("#library-list", OptionList)
+        idx = ol.highlighted
         if idx is None:
             return
         novels = _scan_library()
@@ -61,6 +59,7 @@ class MyLibraryScreen(Screen):
         slug = novels[idx]["slug"]
         if getattr(self, "_pending", None) == slug:
             import shutil
+
             shutil.rmtree(os.path.join("novels", slug))
             self._pending = None
             self.notify(f"Deleted {_slug_to_title(slug)}", timeout=3)
@@ -69,9 +68,10 @@ class MyLibraryScreen(Screen):
         else:
             self._pending = slug
             self.notify(f"Press x again to delete {_slug_to_title(slug)}", timeout=3)
+
     def action_export(self):
-        lv = self.query_one(ListView)
-        idx = lv.index
+        ol = self.query_one("#library-list", OptionList)
+        idx = ol.highlighted
         if idx is None:
             return
         novels = _scan_library()
@@ -91,9 +91,11 @@ class MyLibraryScreen(Screen):
             self.notify(f"Exported to {path}", timeout=5)
         else:
             self.notify("No chapters to export.", timeout=3)
+
     def action_pop(self):
         self._pending = None
         self.app.pop_screen()
+
 
 class LocalChapterScreen(Screen):
     BINDINGS = [
@@ -112,35 +114,41 @@ class LocalChapterScreen(Screen):
     def compose(self):
         yield CustomHeader()
         yield Static(_slug_to_title(self.slug), classes="title")
-        with ScrollableContainer():
-            yield ListView(id="local-chapters")
+        yield OptionList(id="local-chapters")
         yield Footer()
 
     def on_mount(self):
         chap_dir = os.path.join("novels", self.slug)
         if os.path.isdir(chap_dir):
             self.files = []
-            for root, dirs, files in os.walk(chap_dir):
+            for root, _dirs, files in os.walk(chap_dir):
                 for f in sorted(files, key=_chapter_sort_key):
                     rel = os.path.relpath(os.path.join(root, f), chap_dir)
                     self.files.append(rel)
-            lv = self.query_one("#local-chapters", ListView)
+            ol = self.query_one("#local-chapters", OptionList)
             seen = progress.get_seen(self.slug)
+            options = []
             for i, fname in enumerate(self.files):
-                title = os.path.basename(fname).replace(".txt", "").replace("_", " ").title()
+                title = (
+                    os.path.basename(fname)
+                    .replace(".txt", "")
+                    .replace("_", " ")
+                    .title()
+                )
                 prefix = "✓ " if i in seen else "  "
-                lv.mount(ListItem(Label(prefix + title)))
-            lv.focus()
+                options.append(Option(prefix + title))
+            ol.add_options(options)
+            ol.focus()
 
-    def on_list_view_selected(self, event: ListView.Selected):
-        idx = event.list_view.index
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected):
+        idx = event.option_list.index
         if idx is None or idx >= len(self.files):
             return
         self.app.push_screen(LocalReaderScreen(self.files, self.slug, start=idx))
 
     def action_delete(self):
-        lv = self.query_one("#local-chapters", ListView)
-        idx = lv.index
+        ol = self.query_one("#local-chapters", OptionList)
+        idx = ol.highlighted
         if idx is None or idx >= len(self.files):
             return
         fname = self.files[idx]
@@ -160,6 +168,7 @@ class LocalChapterScreen(Screen):
             self.app.push_screen(LocalReaderScreen(self.files, self.slug, start=idx))
         else:
             self.notify("No saved progress.", timeout=2)
+
     def action_download_dialog(self):
         self.run_worker(self._do_download_dialog(), exclusive=True)
 
@@ -178,11 +187,16 @@ class LocalChapterScreen(Screen):
         if not chapters:
             self.notify("Could not fetch chapters.", timeout=3)
             return
-        self.app.push_screen(DownloadDialog(
-            chapters, self.slug, source,
-            current_idx=None,
-            has_translation=False,
-        ))
+        self.app.push_screen(
+            DownloadDialog(
+                chapters,
+                self.slug,
+                source,
+                current_idx=None,
+                has_translation=False,
+            )
+        )
+
     def action_export(self):
         source = _get_source(self.slug)
         if not source:
@@ -200,6 +214,7 @@ class LocalChapterScreen(Screen):
             self.notify(f"Exported to {path}", timeout=5)
         else:
             self.notify("No chapters to export.", timeout=3)
+
     def action_pop(self):
         self._pending = None
         self.app.pop_screen()
