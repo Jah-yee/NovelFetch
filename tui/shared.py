@@ -47,6 +47,8 @@ class LanguagePicker(Screen):
 
 
 class JumpDialog(Screen):
+    BINDINGS = [Binding("escape", "dismiss_pop", "Back")]
+
     def __init__(self, chapters , callback):
         super().__init__()
         self.chapters = chapters
@@ -54,14 +56,17 @@ class JumpDialog(Screen):
 
     def compose(self):
         yield Static(f"Chapters: 1-{len(self.chapters)}")
-        yield Input(placeholder="Enter a number  ")
+        yield Input(placeholder="Enter a number  ", type="integer")
 
-    def on_input_submitted(self, event):
+    async def on_input_submitted(self, event):
         try:
             num = int(event.value)
             if 1 <= num <=len(self.chapters):
-                self.callback(num-1)
+                await self.callback(num-1)
                 self.app.pop_screen()
         except ValueError:
             pass
+
+    def action_dismiss_pop(self):
+        self.app.pop_screen()
 
