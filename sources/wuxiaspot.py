@@ -1,7 +1,5 @@
 import asyncio
-import os
 import urllib.parse
-from typing import Optional
 
 from bs4 import BeautifulSoup
 
@@ -100,12 +98,12 @@ class WuxiaSpotSource(Source):
             "yuri": "Yuri",
         }
 
-    async def fetch_url(self, url: str, params: Optional[dict] = None):
+    async def fetch_url(self, url: str, params: dict | None = None):
         response = await self._client.get(url, params=params)
         response.raise_for_status()
         return BeautifulSoup(response.text, "html.parser")
 
-    def parse_slug(self, url: str) -> Optional[str]:
+    def parse_slug(self, url: str) -> str | None:
         o = urllib.parse.urlparse(url)
         if o.hostname and "wuxiaspot.com" in o.hostname:
             path = o.path.removesuffix(".html").rstrip("/")
@@ -242,7 +240,7 @@ class WuxiaSpotSource(Source):
         return chapters
 
 
-    async def read_chapter(self, url: str) -> Optional[list[str]]:
+    async def read_chapter(self, url: str) -> list[str] | None:
         try:
             soup = await self.fetch_url(url)
             content = soup.select_one(".chapter-content")
@@ -277,6 +275,18 @@ class WuxiaSpotSource(Source):
             return self.extract_novel_rows(soup)
         except Exception:
             return []
+
+    def novel_url(self, slug: str) -> str:
+        return f"https://www.wuxiaspot.com/novel/{slug}.html"
+
+    async def get_novel_info(self, slug: str) -> dict:
+        url = f"https://www.wuxiaspot.com/novel/{slug}.html"
+        soup = await self.fetch_url(url)
+        author_el = soup.select_one(".novel-author") or soup.select_one(".author")
+        author = author_el.get_text(strip=True) if author_el else "Unknown"
+        desc_el = soup.select_one(".novel-desc") or soup.select_one(".description") or soup.select_one(".summary")
+        description = desc_el.get_text("\n\n", strip=True) if desc_el else "No description available."
+        return {"author": author, "description": description}
 
 
 

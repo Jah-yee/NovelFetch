@@ -1,7 +1,5 @@
 import asyncio
-import os
 import urllib.parse
-from typing import Optional
 
 from bs4 import BeautifulSoup
 
@@ -38,7 +36,7 @@ class ScribbleHubSource(Source):
                 ScribbleHubSource._headers)
         return self._httpx_client
 
-    async def _fetch(self, url: str, data: Optional[dict] = None):
+    async def _fetch(self, url: str, data: dict | None = None):
         # curl_cffi is a compiled AAPI extension that python-for-android cannot
         # cross-build reliably. Import lazily so the module (and the whole app)
         # still imports when it is unavailable; requests fall back to plain
@@ -124,11 +122,11 @@ class ScribbleHubSource(Source):
             "tragedy": "Tragedy",
         }
 
-    async def fetch_url(self, url: str, params: Optional[dict] = None):
+    async def fetch_url(self, url: str, params: dict | None = None):
         response = await self._fetch(url)
         return BeautifulSoup(response.text, "html.parser")
 
-    def parse_slug(self, url: str) -> Optional[str]:
+    def parse_slug(self, url: str) -> str | None:
         o = urllib.parse.urlparse(url)
         if o.hostname and "scribblehub.com" in o.hostname:
             parts = o.path.split("/")
@@ -172,7 +170,7 @@ class ScribbleHubSource(Source):
             total_pages = page - 1  # no results means went past the last page
         return novels, total_pages
 
-    async def read_chapter(self, url: str) -> Optional[list[str]]:
+    async def read_chapter(self, url: str) -> list[str] | None:
         soup = await self.fetch_url(url)
         content = soup.select_one("#chp_raw")
         if not content:
@@ -220,3 +218,15 @@ class ScribbleHubSource(Source):
                 "url": href,
             })
         return chapters
+
+    def novel_url(self, slug: str) -> str:
+        return f"https://www.scribblehub.com/series/{slug}/"
+
+    async def get_novel_info(self, slug: str) -> dict:
+        url = f"https://www.scribblehub.com/series/{slug}/"
+        soup = await self.fetch_url(url)
+        author_el = soup.select_one(".fic_author a") or soup.select_one(".author a")
+        author = author_el.get_text(strip=True) if author_el else "Unknown"
+        desc_el = soup.select_one(".wi_fic_desc") or soup.select_one(".description")
+        description = desc_el.get_text("\n\n", strip=True) if desc_el else "No description available."
+        return {"author": author, "description": description}
