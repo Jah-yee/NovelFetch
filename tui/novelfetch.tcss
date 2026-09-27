@@ -1,14 +1,8 @@
-CustomHeader {
-    background: $panel;
-    color: $text;
-    height: 1;
-}
-CustomHeader > #header-title {
-    padding: 0 1;
-}
+/* CustomHeader styles are now in shared.py DEFAULT_CSS */
 
 Screen {
     background: $surface;
+    layout: vertical;
 }
 .title {
     text-align: center;
@@ -19,38 +13,59 @@ Screen {
 .banner {
     text-align: center;
     color: $accent;
-    padding: 2 1 0 1;
+    padding: 2 0 0 0;
 }
-#chapter-text, #local-text {
-    margin: 0 1;
-}
-#chapter-text.rtl, #local-text.rtl {
-    text-align: right;
-}
-#chapter-header {
-    text-align: center;
-    color: $accent;
+.section-header {
     text-style: bold;
-    padding: 0 1;
+    color: $text-muted;
+    padding: 1 0 0 0;
+    text-align: center;
 }
-RadioSet {
-    margin: 0 1;
-    background: transparent;
-    border: none;
+.section-group {
+    height: auto;
 }
-RadioSet:focus {
-    border: none;
+/* Beacon rules: register focus-within on the group itself so Textual
+   refreshes the subtree on focus change (final selector must match node) */
+#primary-group:focus-within {
+    height: auto;
 }
-RadioSet > RadioButton > .toggle--button,
-RadioSet > RadioButton.-on > .toggle--button {
-    color: transparent;
-    background: transparent;
+#browse-group:focus-within {
+    height: auto;
 }
-RadioSet > RadioButton.-selected > .toggle--label {
-    background: transparent;
+#primary-group:focus-within > .section-header,
+#browse-group:focus-within > .section-header {
     color: $accent;
     text-style: bold underline;
 }
+ListView {
+    height: auto;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    border: none;
+}
+ListView:focus {
+    border: none;
+}
+ListView > ListItem {
+    padding: 0 1;
+    background: transparent;
+}
+ListView > ListItem > Label {
+    padding: 0;
+}
+ListView > ListItem.-highlight,
+ListView:focus > ListItem.-highlight {
+    background: transparent;
+    color: $accent;
+    text-style: bold;
+}
+ListView > ListItem.-highlight > Label,
+ListView:focus > ListItem.-highlight > Label {
+    color: $accent;
+    text-style: bold;
+}
+
 ListView {
     margin: 0 1;
 }
@@ -96,4 +111,15 @@ Input {
     padding: 0 1;
     text-style: italic;
     color: $text-muted;
+}
+/* Main menu: center items under PRIMARY ACTIONS / BROWSE */
+#primary-actions > ListItem > Label,
+#browse-actions > ListItem > Label {
+    width: 1fr;
+    text-align: center;
+}
+#main-content {
+    height: 1fr;
+    width: 100%;
+    layout: vertical;
 }

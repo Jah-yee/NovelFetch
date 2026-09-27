@@ -14,6 +14,7 @@ class NovelFetchApp(App):
     def __init__(self):
         super().__init__()
         self.current_source = None
+        self.version = "1.0.0"
 
     def on_mount(self):
         self.push_screen(MainMenu())

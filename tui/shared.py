@@ -1,3 +1,5 @@
+import contextlib
+
 from textual.binding import Binding
 from textual.containers import Horizontal, ScrollableContainer
 from textual.screen import Screen
@@ -7,8 +9,48 @@ from core.progress import LANGUAGES
 
 
 class CustomHeader(Horizontal):
+    DEFAULT_CSS = """
+    CustomHeader {
+        height: 2;
+        background: $panel;
+        color: $text;
+        layout: horizontal;
+    }
+    CustomHeader > #header-title {
+        padding: 0;
+        content-align: left middle;
+    }
+    CustomHeader > #header-source {
+        padding: 0;
+        color: $text-muted;
+        text-style: italic;
+        width: 1fr;
+        content-align: right middle;
+    }
+    """
+
     def compose(self):
-        yield Static(self.app.title, id="header-title")
+        yield Static("", id="header-title")
+        yield Static("", id="header-source")
+
+    def on_mount(self):
+        self._update()
+
+    def _update(self):
+        title = self.app.title
+        version = getattr(self.app, "version", "")
+        if version:
+            title = f"{title} v{version}"
+        self.query_one("#header-title", Static).update(title)
+        src = getattr(self.app, "current_source", None)
+        if src:
+            self.query_one("#header-source", Static).update(f"Source: {src.label} ▼")
+        else:
+            self.query_one("#header-source", Static).update("")
+
+    def watch_app_current_source(self, src):
+        if src:
+            self.query_one("#header-source", Static).update(f"Source: {src.label} ▼")
 
 class LanguagePicker(Screen):
     BINDINGS = [Binding("escape", "dismiss_pop", "Back")]
@@ -37,10 +79,8 @@ class LanguagePicker(Screen):
         self.dismiss(code)
 
     def on_mount(self):
-        try:
+        with contextlib.suppress(Exception):
             self.query_one(ListView).focus()
-        except Exception:
-            pass
 
     def action_dismiss_pop(self):
         self.dismiss(None)
