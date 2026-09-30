@@ -4,6 +4,6 @@ from sources.wuxiaspot import WuxiaSpotSource
 
 REGISTRY = {
     "royalroad": RoyalRoadSource(),
-    "scriblehub": ScribbleHubSource(),
+    "scribblehub": ScribbleHubSource(),
     "wuxiaspot": WuxiaSpotSource(),
 }
